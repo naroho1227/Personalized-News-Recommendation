@@ -1,36 +1,27 @@
 import { useState } from "react";
 
+const API = "http://127.0.0.1:8000";
+
 function App() {
     const [userId, setUserId] = useState("");
     const [newsList, setNewsList] = useState([]);
 
-    // mock 데이터(api 연동 전에 확인차 mock 데이터를 AI한테 추천받아 구성하였습니다.
-    const mockNews = [
-        { id: 1, title: "AI 기술 급성장", category: "IT" },
-        { id: 2, title: "금리 인상 소식", category: "경제" },
-        { id: 3, title: "챔피언스리그 결과", category: "스포츠" },
-        { id: 4, title: "신작 영화 개봉", category: "연예" },
-        { id: 5, title: "기후 변화 이슈", category: "사회" }
-    ];
-
-    // 추천 가져오기 (mock)
-    const getRecommendations = () => {
-        // 나중에 API로 교체 가능
-        // fetch(`/recommend/${userId}`)
-        setNewsList(mockNews);
+    const getRecommendations = async () => {
+        const res = await fetch(`${API}/recommend/${userId}`);
+        const data = await res.json();
+        setNewsList(data);
     };
 
-    // 클릭 로그 (mock)
-    const handleClick = (newsId) => {
-        const logData = {
-            user_id: userId,
-            news_id: newsId
-        };
-
-        // 나중에 API로 교체 가능!
-        // fetch("/log", { method: "POST", body: JSON.stringify(logData) })
-
-        console.log("로그 전송:", logData);
+    const handleClick = async (newsId) => {
+        await fetch(`${API}/log`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_id: parseInt(userId),
+                news_id: newsId,
+                action: "click",
+            }),
+        });
     };
 
     return (

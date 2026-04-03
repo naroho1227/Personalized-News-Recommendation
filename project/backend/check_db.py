@@ -1,6 +1,6 @@
 import sqlite3
 
-DB_PATH = "C:/Users/yhw76/project/news.db" 
+DB_PATH = "C:/Users/yhw76/project/news.db"  
 
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
