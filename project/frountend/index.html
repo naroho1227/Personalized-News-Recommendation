@@ -85,7 +85,7 @@
       font-size: 0.9rem;
     }
 
-    /* 탭 전환 */
+
     .tabs {
       display: flex;
       gap: 8px;
@@ -106,7 +106,7 @@
       border-color: #2563eb;
     }
 
-    /* 막대그래프 */
+
     #chart {
       margin-bottom: 8px;
     }
@@ -199,7 +199,6 @@
 
   <h1>📰 뉴스 추천 시스템</h1>
 
-  <!-- ── 인증 영역 ──────────────────────────────── -->
   <div id="authSection">
     <div class="card">
       <div class="tabs">
@@ -207,14 +206,12 @@
         <div class="tab" onclick="showTab('register')">회원가입</div>
       </div>
 
-      <!-- 로그인 폼 -->
       <div id="loginForm">
         <input id="loginEmail" type="email" placeholder="이메일" />
         <input id="loginPassword" type="password" placeholder="비밀번호" />
         <button class="btn-primary" onclick="doLogin()">로그인</button>
       </div>
 
-      <!-- 회원가입 폼 -->
       <div id="registerForm" style="display:none">
         <input id="regEmail" type="email" placeholder="이메일" />
         <input id="regPassword" type="password" placeholder="비밀번호" />
@@ -237,11 +234,10 @@
     </div>
   </div>
 
-  <!-- ── 메인 영역 (로그인 후) ──────────────────── -->
+
   <div id="mainSection">
     <div id="userInfo"></div>
 
-    <!-- 카테고리 점수 막대그래프 -->
     <div class="card">
       <h2>📊 카테고리 관심도</h2>
       <div id="chart"></div>

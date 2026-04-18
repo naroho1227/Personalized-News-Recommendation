@@ -1,11 +1,10 @@
 const API = "";
 
-// ── 상태 ────────────────────────────────────────────────────
-let token  = localStorage.getItem("token")  || null;
-let userId = localStorage.getItem("userId") || null;
-let nick   = localStorage.getItem("nick")   || null;
 
-// ── 초기화 ───────────────────────────────────────────────────
+let token = localStorage.getItem("token") || null;
+let userId = localStorage.getItem("userId") || null;
+let nick = localStorage.getItem("nick") || null;
+
 window.addEventListener("DOMContentLoaded", () => {
   if (token && userId) {
     showMain();
@@ -13,9 +12,9 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// ── 탭 전환 ──────────────────────────────────────────────────
+
 function showTab(tab) {
-  document.getElementById("loginForm").style.display    = tab === "login"    ? "" : "none";
+  document.getElementById("loginForm").style.display = tab === "login" ? "" : "none";
   document.getElementById("registerForm").style.display = tab === "register" ? "" : "none";
   document.querySelectorAll(".tab").forEach((el, i) => {
     el.classList.toggle("active", (i === 0) === (tab === "login"));
@@ -23,20 +22,20 @@ function showTab(tab) {
   clearMsg();
 }
 
-// ── 메시지 헬퍼 ──────────────────────────────────────────────
+
 function parseError(detail) {
   if (!detail) return "오류가 발생했습니다.";
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) return detail.map(d => d.msg || JSON.stringify(d)).join(", ");
   return JSON.stringify(detail);
 }
-function setError(msg)   { document.getElementById("error").textContent   = typeof msg === "string" ? msg : parseError(msg); document.getElementById("success").textContent = ""; }
-function setSuccess(msg) { document.getElementById("success").textContent = msg; document.getElementById("error").textContent   = ""; }
-function clearMsg()      { setError(""); }
+function setError(msg) { document.getElementById("error").textContent = typeof msg === "string" ? msg : parseError(msg); document.getElementById("success").textContent = ""; }
+function setSuccess(msg) { document.getElementById("success").textContent = msg; document.getElementById("error").textContent = ""; }
+function clearMsg() { setError(""); }
 
-// ── 인증 ─────────────────────────────────────────────────────
+
 async function doRegister() {
-  const email    = document.getElementById("regEmail").value.trim();
+  const email = document.getElementById("regEmail").value.trim();
   const password = document.getElementById("regPassword").value;
   const nickname = document.getElementById("regNickname").value.trim();
   const interest = document.getElementById("regInterest").value;
@@ -44,26 +43,26 @@ async function doRegister() {
   if (!email || !password || !nickname || !interest) { setError("모든 항목을 입력해주세요."); return; }
 
   try {
-    const res  = await fetch(`${API}/auth/register`, {
+    const res = await fetch(`${API}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, nickname, interest }),
     });
     const data = await res.json();
     if (!res.ok) { setError(parseError(data.detail) || "회원가입 실패"); return; }
-    setSuccess(`회원가입 완료! (ID: ${data.id}) 로그인해주세요.`);
+    setSuccess(`회원가입 완료. (ID: ${data.id}) 로그인해주세요.`);
     showTab("login");
   } catch { setError("서버에 연결할 수 없습니다."); }
 }
 
 async function doLogin() {
-  const email    = document.getElementById("loginEmail").value.trim();
+  const email = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
 
   if (!email || !password) { setError("이메일과 비밀번호를 입력해주세요."); return; }
 
   try {
-    const res  = await fetch(`${API}/auth/login`, {
+    const res = await fetch(`${API}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -71,12 +70,12 @@ async function doLogin() {
     const data = await res.json();
     if (!res.ok) { setError(parseError(data.detail) || "로그인 실패"); return; }
 
-    token  = data.access_token;
+    token = data.access_token;
     userId = String(data.user_id);
-    nick   = data.nickname;
-    localStorage.setItem("token",  token);
+    nick = data.nickname;
+    localStorage.setItem("token", token);
     localStorage.setItem("userId", userId);
-    localStorage.setItem("nick",   nick);
+    localStorage.setItem("nick", nick);
 
     showMain();
     loadStats();
@@ -91,21 +90,21 @@ function doLogout() {
   document.getElementById("newsList").innerHTML = "";
 }
 
-// ── 화면 전환 ────────────────────────────────────────────────
+
 function showMain() {
   document.getElementById("authSection").style.display = "none";
   document.getElementById("mainSection").style.display = "block";
-  document.getElementById("userInfo").textContent = `👤 ${nick}님 (ID: ${userId})`;
+  document.getElementById("userInfo").textContent = `${nick}님 (ID: ${userId})`;
 }
 
-// ── 막대그래프 ───────────────────────────────────────────────
+
 async function loadStats() {
   try {
-    const res  = await fetch(`${API}/stats/${userId}`, authHeader());
+    const res = await fetch(`${API}/stats/${userId}`, authHeader());
     if (!res.ok) return;
     const data = await res.json();
     renderChart(data.stats);
-  } catch {}
+  } catch { }
 }
 
 function renderChart(stats) {
@@ -121,13 +120,13 @@ function renderChart(stats) {
   `).join("");
 }
 
-// ── 추천 뉴스 ────────────────────────────────────────────────
+
 async function loadNews() {
   const list = document.getElementById("newsList");
   list.innerHTML = "<p style='color:#888'>불러오는 중...</p>";
 
   try {
-    const res  = await fetch(`${API}/recommend/${userId}`, authHeader());
+    const res = await fetch(`${API}/recommend/${userId}`, authHeader());
     const data = await res.json();
 
     if (!res.ok) { list.innerHTML = `<p style='color:red'>${data.detail || "오류"}</p>`; return; }
@@ -163,11 +162,11 @@ async function clickLog(newsId, url) {
     body: JSON.stringify({ news_id: newsId, action: "click" }),
   });
   window.open(url, "_blank");
-  // 클릭 후 그래프 갱신
+
   setTimeout(loadStats, 500);
 }
 
-// ── 유틸 ─────────────────────────────────────────────────────
+
 function authHeader() {
   return { headers: { Authorization: `Bearer ${token}` } };
 }

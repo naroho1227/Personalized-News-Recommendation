@@ -9,9 +9,8 @@ class User(Base):
     email         = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
     nickname      = Column(String, nullable=False)
-    interest      = Column(String, nullable=False)   # 초기 관심사 (단일)
+    interest      = Column(String, nullable=False)
 
-    # 카테고리별 점수 (초기값: 관심사 1.5, 나머지 1.0)
     score_general       = Column(Float, default=1.0, nullable=False)
     score_technology    = Column(Float, default=1.0, nullable=False)
     score_business      = Column(Float, default=1.0, nullable=False)
@@ -37,5 +36,5 @@ class UserLog(Base):
     id        = Column(Integer, primary_key=True, index=True)
     user_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
     news_id   = Column(Integer, ForeignKey("news.id"), nullable=False)
-    action    = Column(String, nullable=False)   # "view" | "click"
+    action    = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
