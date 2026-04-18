@@ -1,64 +1,61 @@
-from db import insert_news
-from datetime import datetime
 import requests
+import sys
 import os
-from dotenv import load_dotenv
+from datetime import datetime
 
-load_dotenv()
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-API_KEY = os.getenv("NEWS_API_KEY")
+from backend.app.database import SessionLocal, engine, Base
+from backend.app.models import News
 
-def fetch_news():
-    url = "https://newsapi.org/v2/top-headlines"
+API_KEY = "3346403e22304263b5536f87c25f4baa"
+URL = "https://newsapi.org/v2/top-headlines"
+CATEGORIES = ["general", "technology", "business", "sports", "science", "health", "entertainment"]
 
-    params = {
-        "country": "us",   
-        "pageSize": 10,    
-        "apiKey": API_KEY
-    }
 
-    response = requests.get(url, params=params)
+def fetch_and_save_news():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    total_saved = 0
 
-    print("상태코드:", response.status_code)
-
-    data = response.json()
-
-    articles = data.get("articles", [])
-
-    news_list = []
-
-    for article in articles:
-
-        pub_at = article.get("publishedAt")
-        if pub_at:
-            published_at_dt = datetime.fromisoformat(pub_at.replace("Z", "+00:00"))
-        else:
-            published_at_dt = None
-
-        news = {
-            "title": article["title"],
-            "content": article.get("content"),
-            "description": article["description"],
-            "author": article.get("author"),
-            "source_name": article.get("source", {}).get("name"),
-            "url": article.get("url"),
-            "published_at": published_at_dt,
-            "category": "general",
-            "created_at": datetime.now()
+    for category in CATEGORIES:
+        params = {
+            "country": "us",
+            "category": category,
+            "pageSize": 10,
+            "apiKey": API_KEY,
         }
-        news_list.append(news)
+        try:
+            response = requests.get(URL, params=params, timeout=10)
+            response.raise_for_status()
+            articles = response.json().get("articles", [])
 
-    return news_list
+            for a in articles:
+                title = a.get("title")
+                if not title or "[Removed]" in title:
+                    continue
 
-def main():
-    news_list = fetch_news()
-    print(f"📡 API에서 가져온 뉴스 개수: {len(news_list)}개")
+                if db.query(News).filter(News.title == title).first():
+                    continue
 
-    for news in news_list:
-        insert_news(news)
+                news_item = News(
+                    title=title,
+                    content=a.get("content") or a.get("description") or "No Content",
+                    category=category,
+                    description=a.get("description"),
+                    url=a.get("url"),
+                )
+                db.add(news_item)
+                total_saved += 1
 
-    print("DB 저장 완료!")
+        except Exception as e:
+            print(f"[ERROR] {category}: {e}")
+            continue
+
+    db.commit()
+    db.close()
+    print(f"완료: {total_saved}건 저장됨")
 
 
 if __name__ == "__main__":
-    main()
+    fetch_and_save_news()
