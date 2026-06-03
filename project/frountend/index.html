@@ -1,260 +1,504 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
   <meta charset="UTF-8" />
-  <title>뉴스 추천</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>P-N-R — 개인 맞춤형 뉴스</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
-    * {
-      box-sizing: border-box;
+    :root {
+      --ink: #0d0d0d;
+      --surface: #1a1a1a;
+      --surface2: #222222;
+      --accent: #c0392b;
+      --muted: #888;
+      --border: #2e2e2e;
+      --text: #e8e8e8;
+      --text-dim: #aaa;
+      --tag-general:       #4a6fa5;
+      --tag-technology:    #1a6b8a;
+      --tag-business:      #9a6e00;
+      --tag-sports:        #1a7a3e;
+      --tag-science:       #6b3fa0;
+      --tag-health:        #a0302e;
+      --tag-entertainment: #b5450b;
     }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      max-width: 860px;
-      margin: 0 auto;
-      background: #f5f5f5;
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--ink);
+      color: var(--text);
+      min-height: 100vh;
     }
 
-    h1 {
-      color: #222;
-    }
-
-    h2 {
-      font-size: 1rem;
-      color: #444;
-      margin: 0 0 10px;
-    }
-
-    .card {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-
-    input,
-    select {
-      padding: 8px 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      width: 100%;
-      margin-bottom: 8px;
-      font-size: 0.95rem;
-    }
-
-    button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-
-    .btn-primary {
-      background: #2563eb;
-      color: #fff;
-    }
-
-    .btn-secondary {
-      background: #6b7280;
-      color: #fff;
-    }
-
-    .btn-sm {
-      padding: 4px 10px;
-      font-size: 0.82rem;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-
-    #error {
-      color: #dc2626;
-      margin-top: 6px;
-      font-size: 0.9rem;
-    }
-
-    #success {
-      color: #16a34a;
-      margin-top: 6px;
-      font-size: 0.9rem;
-    }
-
-
-    .tabs {
+    .masthead {
+      background: var(--ink);
+      padding: 0 40px;
       display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 3px solid var(--accent);
     }
-
-    .tab {
-      padding: 6px 16px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-      background: #fff;
+    .masthead-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: white;
     }
+    .masthead-logo span { color: var(--accent); }
 
-    .tab.active {
-      background: #2563eb;
-      color: #fff;
-      border-color: #2563eb;
+    .masthead-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
     }
-
-
-    #chart {
-      margin-bottom: 8px;
-    }
-
-    .bar-row {
+    .user-badge {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 5px;
-      font-size: 0.82rem;
+      background: rgba(255,255,255,0.07);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text-dim);
     }
-
-    .bar-label {
-      width: 90px;
-      text-align: right;
-      color: #555;
+    .user-badge .avatar {
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      color: white;
     }
-
-    .bar-bg {
-      flex: 1;
-      background: #e5e7eb;
+    .btn-logout {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.5);
+      padding: 6px 14px;
       border-radius: 4px;
-      height: 16px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: 'Noto Sans KR', sans-serif;
+      transition: all 0.2s;
+    }
+    .btn-logout:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .auth-screen {
+      min-height: calc(100vh - 64px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .auth-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 48px 40px;
+      width: 400px;
+    }
+    .auth-box h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      margin-bottom: 28px;
+      color: white;
+    }
+    .auth-box h2 span { color: var(--accent); }
+
+    .auth-tab {
+      display: flex;
+      gap: 0;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+    }
+    .auth-tab button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 14px;
+      padding: 10px;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: all 0.2s;
+    }
+    .auth-tab button.active {
+      color: white;
+      border-bottom-color: var(--accent);
+    }
+
+    .auth-form { display: flex; flex-direction: column; gap: 12px; }
+    .auth-form input, .auth-form select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .auth-form input:focus, .auth-form select:focus {
+      border-color: var(--accent);
+    }
+    .auth-form input::placeholder { color: var(--muted); }
+    .auth-form select option { background: var(--surface2); }
+
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 12px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .auth-error {
+      color: #e74c3c;
+      font-size: 12px;
+      margin-top: 4px;
+      min-height: 18px;
+    }
+
+    .main-layout {
+      display: none;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      gap: 32px;
+    }
+    .main-layout.visible {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+    }
+
+    .news-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .date-label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+    }
+    .btn-refresh {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 13px;
+      padding: 8px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-refresh:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .news-list { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+
+    .news-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 22px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      transition: border-color 0.2s, transform 0.15s;
+      animation: fadeUp 0.35s ease both;
+    }
+    .news-card:hover {
+      border-color: #444;
+      transform: translateY(-1px);
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-body { flex: 1; min-width: 0; }
+    .card-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+      color: white;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: white;
+      margin-bottom: 8px;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.6;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
     }
 
-    .bar-fill {
-      height: 100%;
-      background: #2563eb;
-      border-radius: 4px;
-      transition: width 0.4s;
-    }
-
-    .bar-pct {
-      width: 42px;
-      color: #333;
-    }
-
-    /* 뉴스 목록 */
-    .news-item {
-      border-bottom: 1px solid #eee;
-      padding: 10px 0;
-    }
-
-    .news-item:last-child {
-      border-bottom: none;
-    }
-
-    .news-item h3 {
-      margin: 0 0 4px;
-      font-size: 0.95rem;
-    }
-
-    .news-item p {
-      margin: 0 0 6px;
-      font-size: 0.82rem;
-      color: #555;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      background: #dbeafe;
-      color: #1d4ed8;
-      font-size: 0.75rem;
-      margin-bottom: 4px;
-    }
-
-    .news-btns {
+    .card-actions {
       display: flex;
-      gap: 6px;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .card-num {
+      font-size: 20px;
+      font-weight: 900;
+      color: rgba(255,255,255,0.1);
+      font-family: 'Playfair Display', serif;
+      line-height: 1;
+    }
+    .btn-read {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 16px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.2s;
+    }
+    .btn-read:hover { opacity: 0.85; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state p { font-size: 14px; margin-top: 8px; }
+
+    .news-error {
+      background: rgba(192,57,43,0.12);
+      border: 1px solid rgba(192,57,43,0.3);
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #e74c3c;
+      font-size: 13px;
+      margin-top: 16px;
     }
 
-    #authSection {}
-
-    #mainSection {
-      display: none;
+    .skeleton-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 22px;
+    }
+    .skeleton-line {
+      background: linear-gradient(90deg, var(--surface2) 25%, #2e2e2e 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      border-radius: 4px;
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
 
-    #userInfo {
-      font-size: 0.9rem;
-      color: #374151;
-      margin-bottom: 10px;
+    .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+    .sidebar-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .sidebar-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .stat-row { margin-bottom: 12px; }
+    .stat-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 5px;
+      color: var(--text-dim);
+    }
+    .stat-label span:last-child { color: white; font-weight: 500; }
+    .stat-bar-bg {
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .stat-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .sidebar-info {
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+    .sidebar-info strong { color: var(--accent); }
+
+    .notice-badge {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 12px;
+      color: var(--text-dim);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .notice-badge.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 780px) {
+      .main-layout.visible { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .masthead { padding: 0 16px; }
     }
   </style>
 </head>
-
 <body>
 
-  <h1>📰 뉴스 추천 시스템</h1>
+<header class="masthead">
+  <div class="masthead-logo">P-N-<span>R</span></div>
+  <div class="masthead-right" id="mastheadRight" style="display:none;">
+    <div class="user-badge">
+      <div class="avatar" id="avatarLetter">U</div>
+      <span id="nicknameDisplay">사용자</span>님
+    </div>
+    <button class="btn-logout" onclick="logout()">로그아웃</button>
+  </div>
+</header>
 
-  <div id="authSection">
-    <div class="card">
-      <div class="tabs">
-        <div class="tab active" onclick="showTab('login')">로그인</div>
-        <div class="tab" onclick="showTab('register')">회원가입</div>
+<div class="auth-screen" id="authScreen">
+  <div class="auth-box">
+    <h2>P-N-<span>R</span></h2>
+    <div class="auth-tab">
+      <button class="active" id="tabLogin" onclick="switchTab('login')">로그인</button>
+      <button id="tabRegister" onclick="switchTab('register')">회원가입</button>
+    </div>
+
+    <div id="loginForm">
+      <div class="auth-form">
+        <input type="email" id="loginEmail" placeholder="이메일" />
+        <input type="password" id="loginPw" placeholder="비밀번호" />
+        <button class="btn-primary" id="btnLogin" onclick="login()">로그인</button>
+        <div class="auth-error" id="loginError"></div>
       </div>
+    </div>
 
-      <div id="loginForm">
-        <input id="loginEmail" type="email" placeholder="이메일" />
-        <input id="loginPassword" type="password" placeholder="비밀번호" />
-        <button class="btn-primary" onclick="doLogin()">로그인</button>
-      </div>
-
-      <div id="registerForm" style="display:none">
-        <input id="regEmail" type="email" placeholder="이메일" />
-        <input id="regPassword" type="password" placeholder="비밀번호" />
-        <input id="regNickname" type="text" placeholder="닉네임" />
+    <div id="registerForm" style="display:none;">
+      <div class="auth-form">
+        <input type="email" id="regEmail" placeholder="이메일" />
+        <input type="password" id="regPw" placeholder="비밀번호" />
+        <input type="text" id="regNickname" placeholder="닉네임" />
         <select id="regInterest">
           <option value="">관심사 선택</option>
-          <option value="general">general</option>
-          <option value="technology">technology</option>
-          <option value="business">business</option>
-          <option value="sports">sports</option>
-          <option value="science">science</option>
-          <option value="health">health</option>
-          <option value="entertainment">entertainment</option>
+          <option value="general">일반</option>
+          <option value="technology">기술</option>
+          <option value="business">경제</option>
+          <option value="sports">스포츠</option>
+          <option value="science">과학</option>
+          <option value="health">건강</option>
+          <option value="entertainment">엔터</option>
         </select>
-        <button class="btn-primary" onclick="doRegister()">회원가입</button>
+        <button class="btn-primary" id="btnRegister" onclick="register()">가입하기</button>
+        <div class="auth-error" id="registerError"></div>
       </div>
-
-      <div id="error"></div>
-      <div id="success"></div>
     </div>
   </div>
+</div>
 
+<div class="main-layout" id="mainLayout">
 
-  <div id="mainSection">
-    <div id="userInfo"></div>
-
-    <div class="card">
-      <h2>📊 카테고리 관심도</h2>
-      <div id="chart"></div>
+  <section>
+    <div class="date-label" id="dateLabel"></div>
+    <div class="news-header">
+      <div class="section-title">오늘의 추천 뉴스</div>
+      <button class="btn-refresh" id="btnRefresh" onclick="loadNews()">새로 추천받기</button>
     </div>
+    <div id="newsError"></div>
+    <div class="news-list" id="newsList"></div>
+  </section>
 
-    <!-- 추천 뉴스 -->
-    <div class="card">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-        <h2 style="margin:0">🗞 추천 뉴스</h2>
-        <button class="btn-primary" onclick="loadNews()">추천 받기</button>
-        <button class="btn-secondary btn-sm" onclick="doLogout()">로그아웃</button>
+  <aside class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-title">관심도 현황</div>
+      <div id="statsArea">
+        <div style="color:var(--muted);font-size:13px;">추천을 받으면 관심도가 표시됩니다.</div>
       </div>
-      <div id="newsList"></div>
     </div>
-  </div>
+    <div class="sidebar-card">
+      <div class="sidebar-title">안내</div>
+      <div class="sidebar-info">
+        기사를 클릭할수록 해당 카테고리의 관심도 점수가 올라갑니다.<br><br>
+        모든 카테고리는 최소 <strong>3%</strong>의 노출 비율을 유지합니다.
+      </div>
+    </div>
+  </aside>
 
-  <script src="/static/script.js"></script>
+</div>
+
+<div class="notice-badge" id="noticeBadge"></div>
+
+<script src="script.js"></script>
 </body>
-
 </html>
