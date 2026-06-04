@@ -1,4 +1,4 @@
-const API = "http:
+const API = "http://127.0.0.1:8000";
 
 const CAT_KO = {
   general: "일반", technology: "기술", business: "경제",
@@ -9,9 +9,9 @@ const CAT_COLOR = {
   sports: "#1a7a3e", science: "#6b3fa0", health: "#a0302e", entertainment: "#b5450b"
 };
 
-let token = localStorage.getItem("np_token") || null;
-let userId = localStorage.getItem("np_uid") || null;
-let nickname = localStorage.getItem("np_nick") || null;
+let token    = localStorage.getItem("np_token") || null;
+let userId   = localStorage.getItem("np_uid")   || null;
+let nickname = localStorage.getItem("np_nick")  || null;
 
 window.addEventListener("DOMContentLoaded", () => {
   setDateLabel();
@@ -23,7 +23,7 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 function setDateLabel() {
-  const now = new Date();
+  const now  = new Date();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   document.getElementById("dateLabel").textContent =
     `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 ${days[now.getDay()]}요일`;
@@ -35,7 +35,7 @@ function switchTab(tab) {
   document.getElementById("registerForm").style.display = isLogin ? "none" : "";
   document.getElementById("tabLogin").classList.toggle("active", isLogin);
   document.getElementById("tabRegister").classList.toggle("active", !isLogin);
-  document.getElementById("loginError").textContent = "";
+  document.getElementById("loginError").textContent    = "";
   document.getElementById("registerError").textContent = "";
 }
 
@@ -48,14 +48,14 @@ async function login() {
 
   if (!email || !pw) { errEl.textContent = "이메일과 비밀번호를 입력해주세요."; return; }
 
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = "로그인 중...";
 
   try {
-    const res = await fetch(`${API}/auth/login`, {
-      method: "POST",
+    const res  = await fetch(`${API}/auth/login`, {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: pw }),
+      body:    JSON.stringify({ email, password: pw }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.detail || "로그인 실패"; return; }
@@ -72,7 +72,7 @@ async function login() {
   } catch {
     errEl.textContent = "서버에 연결할 수 없습니다.";
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = "로그인";
   }
 }
@@ -90,14 +90,14 @@ async function register() {
     errEl.textContent = "모든 항목을 입력해주세요."; return;
   }
 
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = "가입 중...";
 
   try {
-    const res = await fetch(`${API}/auth/register`, {
-      method: "POST",
+    const res  = await fetch(`${API}/auth/register`, {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: pw, nickname: nick, interest }),
+      body:    JSON.stringify({ email, password: pw, nickname: nick, interest }),
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.detail || "가입 실패"; return; }
@@ -109,7 +109,7 @@ async function register() {
   } catch {
     errEl.textContent = "서버에 연결할 수 없습니다.";
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = "가입하기";
   }
 }
@@ -119,102 +119,183 @@ function logout() {
   localStorage.removeItem("np_token");
   localStorage.removeItem("np_uid");
   localStorage.removeItem("np_nick");
-  document.getElementById("authScreen").style.display   = "";
+  document.getElementById("authScreen").style.display    = "";
   document.getElementById("mainLayout").classList.remove("visible");
   document.getElementById("mastheadRight").style.display = "none";
-  document.getElementById("newsList").innerHTML = "";
+  document.getElementById("newsList").innerHTML          = "";
+  document.getElementById("featuredArea").innerHTML      = "";
   document.getElementById("statsArea").innerHTML =
     '<div style="color:var(--muted);font-size:13px;">추천을 받으면 관심도가 표시됩니다.</div>';
 }
 
 function showMain() {
-  document.getElementById("authScreen").style.display   = "none";
+  document.getElementById("authScreen").style.display    = "none";
   document.getElementById("mainLayout").classList.add("visible");
   document.getElementById("mastheadRight").style.display = "";
   document.getElementById("nicknameDisplay").textContent = nickname || "사용자";
-  document.getElementById("avatarLetter").textContent   = (nickname || "U")[0].toUpperCase();
+  document.getElementById("avatarLetter").textContent    = (nickname || "U")[0].toUpperCase();
 }
 
+/* ───────────────────────────────────────────
+   뉴스 로드 (featured + list 통합)
+─────────────────────────────────────────── */
 async function loadNews() {
-  const list  = document.getElementById("newsList");
-  const errEl = document.getElementById("newsError");
-  const btn   = document.getElementById("btnRefresh");
-  errEl.innerHTML = "";
-  btn.disabled    = true;
+  const featuredArea = document.getElementById("featuredArea");
+  const list         = document.getElementById("newsList");
+  const errEl        = document.getElementById("newsError");
+  const btn          = document.getElementById("btnRefresh");
 
-  list.innerHTML = Array.from({length: 5}, () => `
+  errEl.innerHTML    = "";
+  btn.disabled       = true;
+
+  // 스켈레톤
+  featuredArea.innerHTML = `
+    <div class="featured-grid">
+      <div class="skeleton-card" style="min-height:180px;"></div>
+      <div class="skeleton-card" style="min-height:180px;"></div>
+    </div>`;
+  list.innerHTML = Array.from({length: 3}, () => `
     <div class="skeleton-card">
       <div class="skeleton-line" style="width:60px;height:18px;margin-bottom:12px;"></div>
       <div class="skeleton-line" style="width:90%;height:14px;margin-bottom:8px;"></div>
       <div class="skeleton-line" style="width:75%;height:14px;"></div>
-    </div>
-  `).join("");
+    </div>`).join("");
 
   try {
-    const res = await fetch(`${API}/recommend/${userId}`, {
+    const res = await fetch(`${API}/recommend_full/${userId}`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
+
     if (!res.ok) {
       const d = await res.json();
-      list.innerHTML = "";
+      featuredArea.innerHTML = "";
+      list.innerHTML         = "";
       errEl.innerHTML = `<div class="news-error">${d.detail || "오류가 발생했습니다."}</div>`;
       return;
     }
 
     const data = await res.json();
-    list.innerHTML = "";
-
-    if (!data.length) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <div style="font-size:28px;">📰</div>
-          <p>추천 뉴스가 없습니다.<br>뉴스 데이터를 먼저 수집해주세요.</p>
-        </div>`;
-      return;
-    }
-
-    data.forEach((n, i) => {
-      const card = document.createElement("div");
-      card.className = "news-card";
-      card.style.animationDelay = `${i * 40}ms`;
-      const color = CAT_COLOR[n.category] || "#555";
-      const koName = CAT_KO[n.category] || n.category;
-      const safeUrl = n.url ? encodeURI(n.url) : "#";
-      card.innerHTML = `
-        <div class="card-body">
-          <span class="card-tag" style="background:${color}">${koName}</span>
-          <div class="card-title">${escHtml(n.title)}</div>
-          <div class="card-desc">${escHtml(n.description || "")}</div>
-        </div>
-        <div class="card-actions">
-          <div class="card-num">${String(i+1).padStart(2,"0")}</div>
-          <button class="btn-read" onclick="clickNews(${n.id}, '${safeUrl}')">기사 보기 →</button>
-        </div>
-      `;
-      list.appendChild(card);
-    });
-
+    renderFeatured(data.featured);
+    renderList(data.list);
     loadStats();
-    const count = data.length;
-    toast(`${count}개의 뉴스를 추천받았습니다 ✓`);
+    toast(`${1 + data.featured.others.length + data.list.length}개의 뉴스를 추천받았습니다 ✓`);
 
   } catch {
-    list.innerHTML = "";
+    featuredArea.innerHTML = "";
+    list.innerHTML         = "";
     errEl.innerHTML = `<div class="news-error">서버에 연결할 수 없습니다. (${API})</div>`;
   } finally {
     btn.disabled = false;
   }
 }
 
+/* ── 상단 featured 렌더링 ── */
+function renderFeatured(featured) {
+  const area = document.getElementById("featuredArea");
+  if (!featured || (!featured.top && !featured.others.length)) {
+    area.innerHTML = "";
+    return;
+  }
+
+  // 좌: 1위 카테고리
+  let topHtml = "";
+  if (featured.top) {
+    const n      = featured.top;
+    const color  = CAT_COLOR[n.category] || "#555";
+    const koName = CAT_KO[n.category]    || n.category;
+    const safeUrl = n.url ? encodeURI(n.url) : "#";
+    topHtml = `
+      <div class="featured-top-card" style="border-top:3px solid ${color}">
+        <div>
+          <div class="featured-top-label">추천 비율 1위</div>
+          <span class="featured-badge" style="background:${color}20;color:${color}">
+            ${koName} · ${featured.top_ratio}%
+          </span>
+          <div class="featured-title">${escHtml(n.title)}</div>
+          <div class="featured-desc">${escHtml(n.description || "")}</div>
+        </div>
+        <div class="featured-footer">
+          <button class="btn-read" onclick="clickNews(${n.id}, '${safeUrl}')">기사 보기 →</button>
+        </div>
+      </div>`;
+  }
+
+  // 우: 나머지 6개 카테고리 균등
+  let othersHtml = "";
+  if (featured.others.length) {
+    const items = featured.others.map(n => {
+      const color  = CAT_COLOR[n.category] || "#555";
+      const koName = CAT_KO[n.category]    || n.category;
+      const safeUrl = n.url ? encodeURI(n.url) : "#";
+      return `
+        <div class="mini-news-item" onclick="clickNews(${n.id}, '${safeUrl}')">
+          <span class="mini-tag" style="background:${color}">${koName}</span>
+          <div class="mini-title">${escHtml(n.title)}</div>
+        </div>`;
+    }).join("");
+    othersHtml = `
+      <div class="featured-others-card">
+        <div class="others-label">다른 카테고리 둘러보기</div>
+        ${items}
+      </div>`;
+  }
+
+  area.innerHTML = `
+    <div class="featured-grid">
+      ${topHtml}
+      ${othersHtml}
+    </div>
+    <div class="list-divider">
+      <div class="divider-line"></div>
+      <span class="divider-label">알고리즘 기반 추천</span>
+      <div class="divider-line"></div>
+    </div>`;
+}
+
+/* ── 하단 리스트 렌더링 ── */
+function renderList(newsList) {
+  const list = document.getElementById("newsList");
+  list.innerHTML = "";
+
+  if (!newsList || !newsList.length) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size:28px;">📰</div>
+        <p>추천 뉴스가 없습니다.<br>뉴스 데이터를 먼저 수집해주세요.</p>
+      </div>`;
+    return;
+  }
+
+  newsList.forEach((n, i) => {
+    const card    = document.createElement("div");
+    card.className = "news-card";
+    card.style.animationDelay = `${i * 40}ms`;
+    const color   = CAT_COLOR[n.category] || "#555";
+    const koName  = CAT_KO[n.category]    || n.category;
+    const safeUrl = n.url ? encodeURI(n.url) : "#";
+    card.innerHTML = `
+      <div class="card-body">
+        <span class="card-tag" style="background:${color}">${koName}</span>
+        <div class="card-title">${escHtml(n.title)}</div>
+        <div class="card-desc">${escHtml(n.description || "")}</div>
+      </div>
+      <div class="card-actions">
+        <div class="card-num">${String(i+1).padStart(2,"0")}</div>
+        <button class="btn-read" onclick="clickNews(${n.id}, '${safeUrl}')">기사 보기 →</button>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
 async function clickNews(newsId, url) {
   try {
     await fetch(`${API}/log`, {
-      method: "POST",
+      method:  "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":  "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ user_id: parseInt(userId), news_id: newsId, action: "click" }),
+      body: JSON.stringify({ news_id: newsId, action: "click" }),
     });
     loadStats();
   } catch {}
@@ -233,16 +314,14 @@ async function loadStats() {
 }
 
 function renderStats(data) {
-
   const statsArea = document.getElementById("statsArea");
   if (!statsArea) return;
 
   let entries = [];
-
-  if (Array.isArray(data.categories)) {
-    entries = data.categories.map(c => ({
-      key: c.name, ratio: c.ratio ?? c.score
-    }));
+  if (Array.isArray(data.stats)) {
+    entries = data.stats.map(s => ({ key: s.category, ratio: s.ratio }));
+  } else if (Array.isArray(data.categories)) {
+    entries = data.categories.map(c => ({ key: c.name, ratio: c.ratio ?? c.score }));
   } else {
     entries = Object.entries(data).map(([k, v]) => ({
       key: k, ratio: typeof v === "object" ? (v.ratio ?? v.score) : v
@@ -250,13 +329,12 @@ function renderStats(data) {
   }
 
   if (!entries.length) return;
-
   entries.sort((a, b) => b.ratio - a.ratio);
 
   statsArea.innerHTML = entries.map(({ key, ratio }) => {
-    const pct = Math.round((ratio <= 1 ? ratio * 100 : ratio) * 10) / 10;
-    const color = CAT_COLOR[key] || "#555";
-    const koName = CAT_KO[key] || key;
+    const pct    = Math.round((ratio <= 1 ? ratio * 100 : ratio) * 10) / 10;
+    const color  = CAT_COLOR[key] || "#555";
+    const koName = CAT_KO[key]    || key;
     return `
       <div class="stat-row">
         <div class="stat-label">
@@ -272,10 +350,10 @@ function renderStats(data) {
 
 function escHtml(str) {
   return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g,  "&amp;")
+    .replace(/</g,  "&lt;")
+    .replace(/>/g,  "&gt;")
+    .replace(/"/g,  "&quot;");
 }
 
 let toastTimer;

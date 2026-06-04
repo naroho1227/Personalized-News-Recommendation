@@ -28,11 +28,16 @@ def softmax_ratios(scores: dict[str, float]) -> dict[str, float]:
     total = sum(exps.values())
     raw = {c: exps[c] / total for c in CATEGORIES}
 
-    # 최소 3% 보장
-    floor = MIN_RATIO
-    floored = {c: max(raw[c], floor) for c in CATEGORIES}
-    s = sum(floored.values())
-    return {c: floored[c] / s for c in CATEGORIES}
+    # 최소 3% 보장 — 재정규화 후에도 floor가 유지될 때까지 반복
+    normalized = raw
+    for _ in range(10):
+        floored = {c: max(normalized[c], MIN_RATIO) for c in CATEGORIES}
+        s = sum(floored.values())
+        normalized = {c: floored[c] / s for c in CATEGORIES}
+        if min(normalized.values()) >= MIN_RATIO - 1e-9:
+            break
+
+    return normalized
 
 
 def update_score_on_click(db: Session, user: User, clicked_category: str) -> None:
@@ -47,7 +52,57 @@ def update_score_on_click(db: Session, user: User, clicked_category: str) -> Non
     db.commit()
 
 
-def get_recommendations(db: Session, user_id: int, limit: int = 20) -> list[News]:
+def get_featured(db: Session, user_id: int, clicked_ids: list[int]) -> dict:
+    """
+    상단 영역용 추천
+    - top    : 추천 비율 1위 카테고리에서 1건
+    - others : 나머지 6개 카테고리에서 각 1건 (균등)
+    반환값에 used_ids(상단에 노출된 기사 id 목록) 포함
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"top": None, "top_ratio": 0.0, "others": [], "used_ids": []}
+
+    scores  = get_scores(user)
+    ratios  = softmax_ratios(scores)
+    top_cat = max(ratios, key=ratios.get)
+    other_cats = [c for c in CATEGORIES if c != top_cat]
+
+    used_ids = list(clicked_ids)
+
+    # 1위 카테고리 기사 1건
+    top_q = db.query(News).filter(News.category == top_cat)
+    if used_ids:
+        top_q = top_q.filter(News.id.notin_(used_ids))
+    top_article = top_q.order_by(News.created_at.desc()).first()
+    if top_article:
+        used_ids.append(top_article.id)
+
+    # 나머지 6개 카테고리 각 1건
+    other_news = []
+    for cat in other_cats:
+        q = db.query(News).filter(News.category == cat)
+        if used_ids:
+            q = q.filter(News.id.notin_(used_ids))
+        article = q.order_by(News.created_at.desc()).first()
+        if article:
+            used_ids.append(article.id)
+            other_news.append(article)
+
+    return {
+        "top": top_article,
+        "top_ratio": round(ratios[top_cat] * 100, 1),
+        "others": other_news,
+        "used_ids": used_ids,
+    }
+
+
+def get_recommendations(db: Session, user_id: int, limit: int = 13,
+                        exclude_ids: list[int] | None = None) -> list[News]:
+    """
+    하단 알고리즘 기반 추천 (기본 13건)
+    exclude_ids : 상단에서 사용한 id + 클릭 이력 id
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         return []
@@ -59,13 +114,15 @@ def get_recommendations(db: Session, user_id: int, limit: int = 20) -> list[News
         .all()
     ]
 
-    scores = get_scores(user)
-    ratios = softmax_ratios(scores)
+    all_exclude = list(set(clicked_ids + (exclude_ids or [])))
+
+    scores    = get_scores(user)
+    ratios    = softmax_ratios(scores)
 
     raw_counts = {c: ratios[c] * limit for c in CATEGORIES}
     counts: dict[str, int] = {c: int(raw_counts[c]) for c in CATEGORIES}
 
-    shortage = limit - sum(counts.values())
+    shortage   = limit - sum(counts.values())
     remainders = sorted(CATEGORIES, key=lambda c: raw_counts[c] - counts[c], reverse=True)
     for i in range(shortage):
         counts[remainders[i]] += 1
@@ -74,13 +131,9 @@ def get_recommendations(db: Session, user_id: int, limit: int = 20) -> list[News
     for category, n in counts.items():
         if n <= 0:
             continue
-        query = (
-            db.query(News)
-            .filter(News.category == category)
-        )
-        if clicked_ids:
-            query = query.filter(News.id.notin_(clicked_ids))
-        articles = query.order_by(News.created_at.desc()).limit(n).all()
-        result.extend(articles)
+        q = db.query(News).filter(News.category == category)
+        if all_exclude:
+            q = q.filter(News.id.notin_(all_exclude))
+        result.extend(q.order_by(News.created_at.desc()).limit(n).all())
 
     return result

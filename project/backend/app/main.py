@@ -14,13 +14,16 @@ from passlib.context import CryptContext
 
 from .database import engine, Base, SessionLocal
 from .models import News, User, UserLog
-from .recommend import get_recommendations, softmax_ratios, get_scores, update_score_on_click, CATEGORIES
+from .recommend import (
+    get_recommendations, get_featured,
+    softmax_ratios, get_scores, update_score_on_click, CATEGORIES
+)
 
-SECRET_KEY      = os.getenv("SECRET_KEY", "change-this-secret-in-production")
-ALGORITHM       = "HS256"
+SECRET_KEY                = os.getenv("SECRET_KEY", "change-this-secret-in-production")
+ALGORITHM                 = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
 VALID_CATEGORIES = CATEGORIES
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frountend"
@@ -30,6 +33,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 Base.metadata.create_all(bind=engine)
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
+
 def get_db():
     db = SessionLocal()
     try:
@@ -37,20 +41,25 @@ def get_db():
     finally:
         db.close()
 
+
 def create_access_token(data: dict) -> str:
     payload = data.copy()
     payload["exp"] = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> int:
+
+def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> int:
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
+        payload  = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id  = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         return int(user_id)
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -58,25 +67,41 @@ class RegisterRequest(BaseModel):
     nickname: str
     interest: str
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
 
 class LogRequest(BaseModel):
     news_id: int
     action: str
 
+
+def _news_dict(n: News) -> dict:
+    return {
+        "id":          n.id,
+        "title":       n.title,
+        "category":    n.category,
+        "description": n.description,
+        "url":         n.url,
+    }
+
+
 @app.get("/")
 def serve_frontend():
     return FileResponse(str(FRONTEND_DIR / "index.html"))
+
 
 @app.get("/news_list")
 def serve_news_list():
     return FileResponse(str(FRONTEND_DIR / "news_list.html"))
 
+
 @app.get("/api")
 def root():
     return {"message": "News Recommendation API is running"}
+
 
 @app.post("/auth/register", status_code=201)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
@@ -85,9 +110,16 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(409, detail="Email already registered")
     score_init = {f"score_{c}": (1.5 if c == body.interest else 1.0) for c in VALID_CATEGORIES}
-    user = User(email=body.email, password_hash=pwd_context.hash(body.password), nickname=body.nickname, interest=body.interest, **score_init)
+    user = User(
+        email=body.email,
+        password_hash=pwd_context.hash(body.password),
+        nickname=body.nickname,
+        interest=body.interest,
+        **score_init,
+    )
     db.add(user); db.commit(); db.refresh(user)
     return {"id": user.id, "email": user.email, "nickname": user.nickname, "interest": user.interest}
+
 
 @app.post("/auth/login")
 def login(body: LoginRequest, db: Session = Depends(get_db)):
@@ -95,20 +127,85 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     if not user or not pwd_context.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer", "user_id": user.id, "nickname": user.nickname}
+    return {
+        "access_token": token,
+        "token_type":   "bearer",
+        "user_id":      user.id,
+        "nickname":     user.nickname,
+    }
+
 
 @app.get("/recommend/{user_id}")
-def recommend_news(user_id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+def recommend_news(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
+):
     if current_user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    news = get_recommendations(db, user_id)
-    return [{"id": n.id, "title": n.title, "category": n.category, "description": n.description, "url": n.url} for n in news]
+    return [_news_dict(n) for n in get_recommendations(db, user_id)]
+
+
+@app.get("/recommend_full/{user_id}")
+def recommend_full(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
+):
+    """
+    상단 featured + 하단 알고리즘 리스트를 한 번에 반환
+    {
+      "featured": {
+        "top":       { ...news },
+        "top_ratio": 34.1,
+        "others":    [ { ...news }, ... ]   // 최대 6건
+      },
+      "list": [ { ...news }, ... ]           // 최대 13건
+    }
+    """
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 클릭 이력
+    clicked_ids = [
+        log.news_id
+        for log in db.query(UserLog)
+        .filter(UserLog.user_id == user_id, UserLog.action == "click")
+        .all()
+    ]
+
+    # 상단 featured
+    featured = get_featured(db, user_id, clicked_ids)
+
+    # 하단 리스트 (상단에서 쓴 기사 제외)
+    main_list = get_recommendations(
+        db, user_id,
+        limit=13,
+        exclude_ids=featured["used_ids"],
+    )
+
+    return {
+        "featured": {
+            "top":       _news_dict(featured["top"]) if featured["top"] else None,
+            "top_ratio": featured["top_ratio"],
+            "others":    [_news_dict(n) for n in featured["others"]],
+        },
+        "list": [_news_dict(n) for n in main_list],
+    }
+
 
 @app.post("/log")
-def save_log(log: LogRequest, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+def save_log(
+    log: LogRequest,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
+):
     user = db.query(User).filter(User.id == current_user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -117,14 +214,22 @@ def save_log(log: LogRequest, db: Session = Depends(get_db), current_user_id: in
         raise HTTPException(status_code=404, detail="News not found")
     if log.action not in ("view", "click"):
         raise HTTPException(status_code=400, detail="action must be 'view' or 'click'")
+
     new_log = UserLog(user_id=current_user_id, news_id=log.news_id, action=log.action)
     db.add(new_log); db.commit()
+
     if log.action == "click":
         update_score_on_click(db, user, news.category)
+
     return {"status": "success"}
 
+
 @app.get("/stats/{user_id}")
-def get_stats(user_id: int, db: Session = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+def get_stats(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
+):
     if current_user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     user = db.query(User).filter(User.id == user_id).first()
@@ -132,4 +237,14 @@ def get_stats(user_id: int, db: Session = Depends(get_db), current_user_id: int 
         raise HTTPException(status_code=404, detail="User not found")
     scores = get_scores(user)
     ratios = softmax_ratios(scores)
-    return {"user_id": user_id, "stats": [{"category": c, "score": round(scores[c], 4), "ratio": round(ratios[c] * 100, 2)} for c in CATEGORIES]}
+    return {
+        "user_id": user_id,
+        "stats": [
+            {
+                "category": c,
+                "score":    round(scores[c], 4),
+                "ratio":    round(ratios[c] * 100, 2),
+            }
+            for c in CATEGORIES
+        ],
+    }
