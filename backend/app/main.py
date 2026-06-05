@@ -1,37 +1,35 @@
-import os
-from datetime import datetime, timedelta
-from pathlib import Path
-
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
+from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import os
 
 from .database import engine, Base, SessionLocal
-from .models import News, User, UserLog
-from .recommend import (
-    get_recommendations, get_featured,
-    softmax_ratios, get_scores, update_score_on_click, CATEGORIES
-)
+from .models import User, UserLog
+from .recommend import get_recommendations, update_score, get_ratios, CATEGORIES
 
-SECRET_KEY                = os.getenv("SECRET_KEY", "change-this-secret-in-production")
-ALGORITHM                 = "HS256"
+SECRET_KEY = "newspick-secret-key-2024"
+ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto")
-bearer_scheme = HTTPBearer()
-VALID_CATEGORIES = CATEGORIES
-FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frountend"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 Base.metadata.create_all(bind=engine)
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 def get_db():
@@ -42,23 +40,29 @@ def get_db():
         db.close()
 
 
-def create_access_token(data: dict) -> str:
-    payload = data.copy()
-    payload["exp"] = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
 
 
-def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> int:
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def create_token(user_id: int) -> str:
+    expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     try:
-        payload  = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id  = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return int(user_id)
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except (JWTError, TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다.")
+    return user
 
 
 class RegisterRequest(BaseModel):
@@ -68,183 +72,98 @@ class RegisterRequest(BaseModel):
     interest: str
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
 class LogRequest(BaseModel):
-    news_id: int
+    news_url: str
+    news_category: str
     action: str
 
 
-def _news_dict(n: News) -> dict:
-    return {
-        "id":          n.id,
-        "title":       n.title,
-        "category":    n.category,
-        "description": n.description,
-        "url":         n.url,
-    }
-
-
 @app.get("/")
-def serve_frontend():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
-
-
-@app.get("/news_list")
-def serve_news_list():
-    return FileResponse(str(FRONTEND_DIR / "news_list.html"))
-
-
-@app.get("/api")
 def root():
-    return {"message": "News Recommendation API is running"}
+    return {"message": "NewsPick API"}
 
 
-@app.post("/auth/register", status_code=201)
+@app.post("/auth/register")
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    if body.interest not in VALID_CATEGORIES:
-        raise HTTPException(400, detail=f"interest must be one of: {VALID_CATEGORIES}")
+    if body.interest not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="유효하지 않은 카테고리입니다.")
     if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(409, detail="Email already registered")
-    score_init = {f"score_{c}": (1.5 if c == body.interest else 1.0) for c in VALID_CATEGORIES}
+        raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+
+    scores = {cat: 1.0 for cat in CATEGORIES}
+    scores[body.interest] = 1.5
+
     user = User(
         email=body.email,
-        password_hash=pwd_context.hash(body.password),
+        password=hash_password(body.password),
         nickname=body.nickname,
-        interest=body.interest,
-        **score_init,
+        score_general=scores["general"],
+        score_technology=scores["technology"],
+        score_business=scores["business"],
+        score_sports=scores["sports"],
+        score_science=scores["science"],
+        score_health=scores["health"],
+        score_entertainment=scores["entertainment"],
     )
-    db.add(user); db.commit(); db.refresh(user)
-    return {"id": user.id, "email": user.email, "nickname": user.nickname, "interest": user.interest}
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"message": "가입이 완료되었습니다."}
 
 
 @app.post("/auth/login")
-def login(body: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
-    if not user or not pwd_context.verify(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token({"sub": str(user.id)})
+def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form.username).first()
+    if not user or not verify_password(form.password, user.password):
+        raise HTTPException(status_code=400, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
+    token = create_token(user.id)
     return {
         "access_token": token,
-        "token_type":   "bearer",
-        "user_id":      user.id,
-        "nickname":     user.nickname,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "nickname": user.nickname,
     }
 
 
-@app.get("/recommend/{user_id}")
-def recommend_news(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
-):
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return [_news_dict(n) for n in get_recommendations(db, user_id)]
-
-
-@app.get("/recommend_full/{user_id}")
-def recommend_full(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
-):
-    """
-    상단 featured + 하단 알고리즘 리스트를 한 번에 반환
-    {
-      "featured": {
-        "top":       { ...news },
-        "top_ratio": 34.1,
-        "others":    [ { ...news }, ... ]   // 최대 6건
-      },
-      "list": [ { ...news }, ... ]           // 최대 13건
-    }
-    """
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # 클릭 이력
-    clicked_ids = [
-        log.news_id
-        for log in db.query(UserLog)
-        .filter(UserLog.user_id == user_id, UserLog.action == "click")
-        .all()
-    ]
-
-    # 상단 featured
-    featured = get_featured(db, user_id, clicked_ids)
-
-    # 하단 리스트 (상단에서 쓴 기사 제외)
-    main_list = get_recommendations(
-        db, user_id,
-        limit=13,
-        exclude_ids=featured["used_ids"],
-    )
-
-    return {
-        "featured": {
-            "top":       _news_dict(featured["top"]) if featured["top"] else None,
-            "top_ratio": featured["top_ratio"],
-            "others":    [_news_dict(n) for n in featured["others"]],
-        },
-        "list": [_news_dict(n) for n in main_list],
-    }
+@app.get("/recommend")
+def recommend_news(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    articles = get_recommendations(db, current_user.id)
+    if not articles:
+        raise HTTPException(status_code=404, detail="추천 기사를 불러올 수 없습니다.")
+    return articles
 
 
 @app.post("/log")
-def save_log(
-    log: LogRequest,
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
-):
-    user = db.query(User).filter(User.id == current_user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    news = db.query(News).filter(News.id == log.news_id).first()
-    if not news:
-        raise HTTPException(status_code=404, detail="News not found")
+def save_log(log: LogRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if log.action not in ("view", "click"):
-        raise HTTPException(status_code=400, detail="action must be 'view' or 'click'")
+        raise HTTPException(status_code=400, detail="유효하지 않은 액션입니다.")
+    if log.news_category not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="유효하지 않은 카테고리입니다.")
 
-    new_log = UserLog(user_id=current_user_id, news_id=log.news_id, action=log.action)
-    db.add(new_log); db.commit()
+    new_log = UserLog(
+        user_id=current_user.id,
+        news_url=log.news_url,
+        news_category=log.news_category,
+        action=log.action,
+    )
+    db.add(new_log)
 
     if log.action == "click":
-        update_score_on_click(db, user, news.category)
+        update_score(db, current_user, log.news_category)
 
-    return {"status": "success"}
+    db.commit()
+    return {"status": "ok"}
 
 
-@app.get("/stats/{user_id}")
-def get_stats(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
-):
-    if current_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    scores = get_scores(user)
-    ratios = softmax_ratios(scores)
-    return {
-        "user_id": user_id,
-        "stats": [
-            {
-                "category": c,
-                "score":    round(scores[c], 4),
-                "ratio":    round(ratios[c] * 100, 2),
-            }
-            for c in CATEGORIES
-        ],
-    }
+@app.get("/stats")
+def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ratios = get_ratios(current_user)
+    return [
+        {"name": cat, "ratio": round(ratio * 100, 2)}
+        for cat, ratio in ratios.items()
+    ]
+
+
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "..", "frountend")
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
