@@ -1,3 +1,4 @@
+import re
 import feedparser
 
 RSS_FEEDS = {
@@ -31,6 +32,13 @@ RSS_FEEDS = {
     ],
 }
 
+def strip_html(text: str) -> str:
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'&nbsp;', ' ', text)
+    text = re.sub(r'&[a-zA-Z]+;', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 
 def fetch_rss(category: str, count: int, exclude_urls: set) -> list:
     articles = []
@@ -44,7 +52,7 @@ def fetch_rss(category: str, count: int, exclude_urls: set) -> list:
                     continue
                 if url in exclude_urls:
                     continue
-                description = getattr(entry, "summary", "") or ""
+                description = strip_html(getattr(entry, "summary", "") or "")
                 if len(description) > 200:
                     description = description[:200] + "..."
                 articles.append({
