@@ -53,6 +53,8 @@ def fetch_rss(category: str, count: int, exclude_urls: set) -> list:
                 if url in exclude_urls:
                     continue
                 description = strip_html(getattr(entry, "summary", "") or "")
+                if not description:
+                    continue
                 if len(description) > 200:
                     description = description[:200] + "..."
                 articles.append({
